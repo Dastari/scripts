@@ -37,8 +37,8 @@ $STD cp -rf /root/supabase/docker/* "$PROJECT_DIR"
 $STD cp /root/supabase/docker/.env.example "$PROJECT_DIR/.env"
 chmod -R 755 "$PROJECT_DIR"
 
-FIRST_LOGIN="/root/supabase-first-login.sh"
-cat <<'EOF' >"$FIRST_LOGIN"
+SETUP_SCRIPT="/root/supabase-setup.sh"
+cat <<'EOF' >"$SETUP_SCRIPT"
 #!/usr/bin/env bash
 set -euo pipefail
 IFS=$'\n\t'
@@ -95,16 +95,14 @@ print_table() {
   echo
 }
 
-project_default="__PROJECT_DEFAULT__"
-read -r -p "Enter Supabase project directory name [${project_default}]: " project_name
-project_name=${project_name:-${project_default}}
-cd /root/"${project_name}"
+project_name="${1:-}"
+db_password="${2:-}"
+if [[ -z "$project_name" || -z "$db_password" ]]; then
+  echo "Usage: $0 <project_name> <db_password>"
+  exit 1
+fi
 
-db_password=""
-while [ -z "$db_password" ]; do
-  read -r -s -p "Enter database password (POSTGRES_PASSWORD): " db_password
-  echo
-done
+cd /root/"${project_name}"
 
 jwt_secret=$(openssl rand -hex 64)
 anon_key=$(openssl rand -hex 32)
@@ -194,13 +192,41 @@ sed -i '/supabase-first-login.sh/d' ~/.bashrc
 rm -f ~/supabase-first-login.sh
 EOF
 
+chmod +x "$SETUP_SCRIPT"
+
+FIRST_LOGIN="/root/supabase-first-login.sh"
+cat <<'EOF' >"$FIRST_LOGIN"
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
+
+project_default="__PROJECT_DEFAULT__"
+read -r -p "Enter Supabase project directory name [${project_default}]: " project_name
+project_name=${project_name:-${project_default}}
+
+db_password=""
+while [ -z "$db_password" ]; do
+  read -r -s -p "Enter database password (POSTGRES_PASSWORD): " db_password
+  echo
+done
+
+/root/supabase-setup.sh "$project_name" "$db_password"
+EOF
+
 sed -i "s/__PROJECT_DEFAULT__/${PROJECT_NAME_DEFAULT}/" "$FIRST_LOGIN"
 chmod +x "$FIRST_LOGIN"
 
 if ! grep -q "supabase-first-login.sh" /root/.bashrc; then
   echo "[ -f /root/supabase-first-login.sh ] && /root/supabase-first-login.sh" >>/root/.bashrc
 fi
-msg_ok "Created first-login helper"
+
+if [[ -n "${SUPABASE_DB_PASSWORD:-}" ]]; then
+  msg_info "Running Supabase setup (preseeded)"
+  /root/supabase-setup.sh "${PROJECT_NAME_DEFAULT}" "${SUPABASE_DB_PASSWORD}"
+  msg_ok "Supabase setup completed"
+else
+  msg_ok "Created first-login helper"
+fi
 
 motd_ssh
 customize
