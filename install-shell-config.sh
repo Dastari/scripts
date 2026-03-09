@@ -7,12 +7,20 @@ if [[ "${TRACE-0}" == "1" ]]; then
   set -x
 fi
 
+SPINNER_FRAMES=(⠁ ⠂ ⠄ ⡀ ⢀ ⠠ ⠐ ⠈)
+TOTAL_STEPS=10
+CURRENT_STEP=0
+LOG_FILE="$(mktemp -t shell-bootstrap.XXXXXX.log)"
+
 log() {
   printf '[shell-bootstrap] %s\n' "$*"
 }
 
 fail() {
   printf '[shell-bootstrap] ERROR: %s\n' "$*" >&2
+  if [[ -f "$LOG_FILE" ]]; then
+    printf '[shell-bootstrap] See log: %s\n' "$LOG_FILE" >&2
+  fi
   exit 1
 }
 
@@ -39,11 +47,75 @@ BACKUP_DIR="$BACKUP_ROOT/$TIMESTAMP"
 
 mkdir -p "$BACKUP_DIR"
 
+cleanup() {
+  local exit_code=$?
+  if [[ $exit_code -eq 0 ]]; then
+    rm -f "$LOG_FILE"
+  else
+    printf '\n' >&2
+  fi
+}
+
+trap cleanup EXIT
+
+render_progress_bar() {
+  local width=10
+  local filled=0
+  local empty=0
+  local fill_bar=""
+  local empty_bar=""
+
+  if (( TOTAL_STEPS > 0 )); then
+    filled=$(( CURRENT_STEP * width / TOTAL_STEPS ))
+  fi
+  empty=$(( width - filled ))
+
+  if (( filled > 0 )); then
+    fill_bar="$(printf '%*s' "$filled" '' | tr ' ' '⣿')"
+  fi
+  if (( empty > 0 )); then
+    empty_bar="$(printf '%*s' "$empty" '' | tr ' ' '⣀')"
+  fi
+
+  printf '%s%s' "$fill_bar" "$empty_bar"
+}
+
+start_step() {
+  CURRENT_STEP=$((CURRENT_STEP + 1))
+  printf '[%02d/%02d] %s %s\n' "$CURRENT_STEP" "$TOTAL_STEPS" "$(render_progress_bar)" "$1"
+}
+
+run_quiet() {
+  local description="$1"
+  shift
+
+  start_step "$description"
+  printf '      '
+
+  "$@" >>"$LOG_FILE" 2>&1 &
+  local cmd_pid=$!
+  local frame_index=0
+
+  while kill -0 "$cmd_pid" 2>/dev/null; do
+    printf '\r      %s %s' "${SPINNER_FRAMES[$frame_index]}" "$description"
+    frame_index=$(( (frame_index + 1) % ${#SPINNER_FRAMES[@]} ))
+    sleep 0.1
+  done
+
+  wait "$cmd_pid" || {
+    local exit_code=$?
+    printf '\r      %s %s\n' '✖' "$description" >&2
+    tail -n 40 "$LOG_FILE" >&2 || true
+    exit "$exit_code"
+  }
+
+  printf '\r      %s %s\n' '✔' "$description"
+}
+
 backup_file() {
   local file="$1"
   if [[ -e "$file" || -L "$file" ]]; then
     cp -a "$file" "$BACKUP_DIR/"
-    log "Backed up $(basename "$file") to $BACKUP_DIR"
   fi
 }
 
@@ -456,11 +528,8 @@ EOF
 }
 
 install_packages() {
-  log "Updating apt package index"
-  $SUDO apt-get update
-
-  log "Installing packages"
-  $SUDO apt-get install -y \
+  run_quiet "Updating apt package index" $SUDO apt-get update
+  run_quiet "Installing base packages" $SUDO apt-get install -y \
     bash-completion \
     ca-certificates \
     curl \
@@ -482,20 +551,32 @@ install_tmux_plugins() {
 
 main() {
   install_packages
-  install_oh_my_bash
-  install_tmux_plugins
+  run_quiet "Installing Oh My Bash" install_oh_my_bash
+  run_quiet "Installing tmux plugins and Nord theme" install_tmux_plugins
 
+  start_step "Backing up existing shell files"
   backup_file "$HOME/.bashrc"
   backup_file "$HOME/.profile"
   backup_file "$HOME/.tmux.conf"
   backup_file "$HOME/.dir_colors"
   backup_file "$HOME/.sdirs"
+  printf '      %s %s\n' '✔' "Backing up existing shell files"
 
+  start_step "Writing .bashrc"
   write_bashrc
+  printf '      %s %s\n' '✔' "Writing .bashrc"
+  start_step "Writing .profile"
   write_profile
+  printf '      %s %s\n' '✔' "Writing .profile"
+  start_step "Writing .tmux.conf"
   write_tmux_conf
+  printf '      %s %s\n' '✔' "Writing .tmux.conf"
+  start_step "Writing .dir_colors"
   write_dir_colors
+  printf '      %s %s\n' '✔' "Writing .dir_colors"
+  start_step "Resetting bashmarks store"
   : >"$HOME/.sdirs"
+  printf '      %s %s\n' '✔' "Resetting bashmarks store"
 
   log "Shell configuration installed."
   log "Open a new shell or run: source ~/.bashrc"
