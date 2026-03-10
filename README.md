@@ -38,7 +38,7 @@ curl -fsSL https://raw.githubusercontent.com/Dastari/scripts/main/install-nvchad
 If you want to install the required font from Windows PowerShell, run:
 
 ```powershell
-& ([scriptblock]::Create((Invoke-RestMethod 'https://to.loredo.me/Install-NerdFont.ps1'))) -Name JetBrainsMono
+& ([scriptblock]::Create((Invoke-RestMethod 'https://raw.githubusercontent.com/jpawlowski/nerd-fonts-installer-PS/main/Invoke-NerdFontInstaller.ps1'))) -Name JetBrainsMono
 ```
 
 After installing the font, set your terminal/editor font to `JetBrainsMono Nerd Font`.
