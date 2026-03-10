@@ -7,10 +7,15 @@ if [[ "${TRACE-0}" == "1" ]]; then
   set -x
 fi
 
-SPINNER_FRAMES=(⠁ ⠂ ⠄ ⡀ ⢀ ⠠ ⠐ ⠈)
 TOTAL_STEPS=10
 CURRENT_STEP=0
 LOG_FILE="$(mktemp -t shell-bootstrap.XXXXXX.log)"
+USE_UNICODE_UI=0
+SPINNER_FRAMES=('-' '\' '|' '/')
+PROGRESS_FILL_CHAR='#'
+PROGRESS_EMPTY_CHAR='-'
+SUCCESS_MARK='OK'
+FAIL_MARK='!!'
 
 log() {
   printf '[shell-bootstrap] %s\n' "$*"
@@ -58,6 +63,20 @@ cleanup() {
 
 trap cleanup EXIT
 
+init_ui() {
+  if [[ "${UNICODE_UI-}" == "1" ]]; then
+    USE_UNICODE_UI=1
+  fi
+
+  if (( USE_UNICODE_UI )); then
+    SPINNER_FRAMES=(⠁ ⠂ ⠄ ⡀ ⢀ ⠠ ⠐ ⠈)
+    PROGRESS_FILL_CHAR='⣿'
+    PROGRESS_EMPTY_CHAR='⣀'
+    SUCCESS_MARK='✔'
+    FAIL_MARK='✖'
+  fi
+}
+
 render_progress_bar() {
   local width=10
   local filled=0
@@ -71,10 +90,10 @@ render_progress_bar() {
   empty=$(( width - filled ))
 
   if (( filled > 0 )); then
-    fill_bar="$(printf '%*s' "$filled" '' | tr ' ' '⣿')"
+    fill_bar="$(printf '%*s' "$filled" '' | tr ' ' "$PROGRESS_FILL_CHAR")"
   fi
   if (( empty > 0 )); then
-    empty_bar="$(printf '%*s' "$empty" '' | tr ' ' '⣀')"
+    empty_bar="$(printf '%*s' "$empty" '' | tr ' ' "$PROGRESS_EMPTY_CHAR")"
   fi
 
   printf '%s%s' "$fill_bar" "$empty_bar"
@@ -104,12 +123,12 @@ run_quiet() {
 
   wait "$cmd_pid" || {
     local exit_code=$?
-    printf '\r      %s %s\n' '✖' "$description" >&2
+    printf '\r      %s %s\n' "$FAIL_MARK" "$description" >&2
     tail -n 40 "$LOG_FILE" >&2 || true
     exit "$exit_code"
   }
 
-  printf '\r      %s %s\n' '✔' "$description"
+  printf '\r      %s %s\n' "$SUCCESS_MARK" "$description"
 }
 
 backup_file() {
@@ -550,6 +569,7 @@ install_tmux_plugins() {
 }
 
 main() {
+  init_ui
   install_packages
   run_quiet "Installing Oh My Bash" install_oh_my_bash
   run_quiet "Installing tmux plugins and Nord theme" install_tmux_plugins
@@ -560,23 +580,23 @@ main() {
   backup_file "$HOME/.tmux.conf"
   backup_file "$HOME/.dir_colors"
   backup_file "$HOME/.sdirs"
-  printf '      %s %s\n' '✔' "Backing up existing shell files"
+  printf '      %s %s\n' "$SUCCESS_MARK" "Backing up existing shell files"
 
   start_step "Writing .bashrc"
   write_bashrc
-  printf '      %s %s\n' '✔' "Writing .bashrc"
+  printf '      %s %s\n' "$SUCCESS_MARK" "Writing .bashrc"
   start_step "Writing .profile"
   write_profile
-  printf '      %s %s\n' '✔' "Writing .profile"
+  printf '      %s %s\n' "$SUCCESS_MARK" "Writing .profile"
   start_step "Writing .tmux.conf"
   write_tmux_conf
-  printf '      %s %s\n' '✔' "Writing .tmux.conf"
+  printf '      %s %s\n' "$SUCCESS_MARK" "Writing .tmux.conf"
   start_step "Writing .dir_colors"
   write_dir_colors
-  printf '      %s %s\n' '✔' "Writing .dir_colors"
+  printf '      %s %s\n' "$SUCCESS_MARK" "Writing .dir_colors"
   start_step "Resetting bashmarks store"
   : >"$HOME/.sdirs"
-  printf '      %s %s\n' '✔' "Resetting bashmarks store"
+  printf '      %s %s\n' "$SUCCESS_MARK" "Resetting bashmarks store"
 
   log "Shell configuration installed."
   log "Open a new shell or run: source ~/.bashrc"

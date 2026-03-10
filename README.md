@@ -18,6 +18,7 @@ curl -fsSL https://raw.githubusercontent.com/Dastari/scripts/main/install-shell-
 ```
 
 The script expects Ubuntu/Debian with `apt-get`, uses `sudo` when needed, and backs up any existing shell dotfiles into `~/.shell-bootstrap-backups/<timestamp>/`.
+Set `UNICODE_UI=1` if you want the optional braille-style progress UI instead of the default ASCII-safe output.
 
 ## NvChad bootstrap
 
@@ -34,6 +35,8 @@ Run it with:
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Dastari/scripts/main/install-nvchad.sh | bash
 ```
+
+Set `UNICODE_UI=1` if you want the optional braille-style progress UI instead of the default ASCII-safe output.
 
 If you want to install the required font from Windows PowerShell, run:
 

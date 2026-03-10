@@ -7,10 +7,15 @@ if [[ "${TRACE-0}" == "1" ]]; then
   set -x
 fi
 
-SPINNER_FRAMES=(⠁ ⠂ ⠄ ⡀ ⢀ ⠠ ⠐ ⠈)
 TOTAL_STEPS=10
 CURRENT_STEP=0
 LOG_FILE="$(mktemp -t nvchad-bootstrap.XXXXXX.log)"
+USE_UNICODE_UI=0
+SPINNER_FRAMES=('-' '\' '|' '/')
+PROGRESS_FILL_CHAR='#'
+PROGRESS_EMPTY_CHAR='-'
+SUCCESS_MARK='OK'
+FAIL_MARK='!!'
 
 NVIM_CONFIG_DIR="$HOME/.config/nvim"
 NVIM_SHARE_DIR="$HOME/.local/share/nvim"
@@ -61,6 +66,20 @@ cleanup() {
 
 trap cleanup EXIT
 
+init_ui() {
+  if [[ "${UNICODE_UI-}" == "1" ]]; then
+    USE_UNICODE_UI=1
+  fi
+
+  if (( USE_UNICODE_UI )); then
+    SPINNER_FRAMES=(⠁ ⠂ ⠄ ⡀ ⢀ ⠠ ⠐ ⠈)
+    PROGRESS_FILL_CHAR='⣿'
+    PROGRESS_EMPTY_CHAR='⣀'
+    SUCCESS_MARK='✔'
+    FAIL_MARK='✖'
+  fi
+}
+
 render_progress_bar() {
   local width=10
   local filled=0
@@ -74,10 +93,10 @@ render_progress_bar() {
   empty=$(( width - filled ))
 
   if (( filled > 0 )); then
-    fill_bar="$(printf '%*s' "$filled" '' | tr ' ' '⣿')"
+    fill_bar="$(printf '%*s' "$filled" '' | tr ' ' "$PROGRESS_FILL_CHAR")"
   fi
   if (( empty > 0 )); then
-    empty_bar="$(printf '%*s' "$empty" '' | tr ' ' '⣀')"
+    empty_bar="$(printf '%*s' "$empty" '' | tr ' ' "$PROGRESS_EMPTY_CHAR")"
   fi
 
   printf '%s%s' "$fill_bar" "$empty_bar"
@@ -107,12 +126,12 @@ run_quiet() {
 
   wait "$cmd_pid" || {
     local exit_code=$?
-    printf '\r      %s %s\n' '✖' "$description" >&2
+    printf '\r      %s %s\n' "$FAIL_MARK" "$description" >&2
     tail -n 40 "$LOG_FILE" >&2 || true
     exit "$exit_code"
   }
 
-  printf '\r      %s %s\n' '✔' "$description"
+  printf '\r      %s %s\n' "$SUCCESS_MARK" "$description"
 }
 
 backup_path() {
@@ -206,6 +225,7 @@ bootstrap_nvchad_extras() {
 }
 
 main() {
+  init_ui
   detect_arch
   install_packages
   run_quiet "Installing latest stable Neovim" install_neovim
@@ -213,13 +233,13 @@ main() {
   run_quiet "Installing tree-sitter CLI" install_tree_sitter_cli
   start_step "Backing up previous Neovim data"
   prepare_nvim_dirs
-  printf '      %s %s\n' '✔' "Backing up previous Neovim data"
+  printf '      %s %s\n' "$SUCCESS_MARK" "Backing up previous Neovim data"
   run_quiet "Cloning NvChad starter" install_nvchad
   run_quiet "Bootstrapping lazy.nvim plugins" bootstrap_lazy
   run_quiet "Running MasonInstallAll and TSInstallAll" bootstrap_nvchad_extras
   start_step "Final verification"
   nvim --version >>"$LOG_FILE" 2>&1
-  printf '      %s %s\n' '✔' "Final verification"
+  printf '      %s %s\n' "$SUCCESS_MARK" "Final verification"
 
   log "NvChad installed."
   log "Set your terminal font to JetBrainsMono Nerd Font."
